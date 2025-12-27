@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lifshitz Pressure Lab</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f6f8fa;
+      color: #1f2937;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 1.5rem 1rem 0.25rem;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 2.4vw, 2.3rem);
+    }
+
+    p.subtitle {
+      margin: 0.3rem 0 1rem;
+      color: #4b5563;
+      font-size: 0.95rem;
+    }
+
+    .lab-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      padding: 0 1rem 2rem;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 1rem 1rem 0.5rem;
+      border-bottom: 1px solid #e5e7eb;
+      background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%);
+    }
+
+    .card-body {
+      padding: 1rem;
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem 1rem;
+    }
+
+    label {
+      font-weight: 600;
+      color: #1f2937;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.95rem;
+    }
+
+    input[type="range"],
+    select,
+    button {
+      width: 100%;
+      margin-top: 0.35rem;
+      box-sizing: border-box;
+    }
+
+    input[type="range"] {
+      accent-color: #0058b0;
+    }
+
+    select,
+    button,
+    input[type="number"] {
+      padding: 0.45rem 0.6rem;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 0.95rem;
+      background: #fff;
+    }
+
+    button {
+      cursor: pointer;
+      color: #fff;
+      background: #0058b0;
+      border: none;
+      font-weight: 700;
+      transition: transform 0.05s ease, box-shadow 0.15s ease;
+    }
+
+    button.secondary {
+      background: #6b7280;
+    }
+
+    button:hover {
+      box-shadow: 0 6px 18px rgba(0, 88, 176, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .chart-area {
+      height: clamp(220px, 38vh, 340px);
+      position: relative;
+      width: 100%;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+
+    .footer-note {
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.9rem;
+      padding: 1.5rem 0 2rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Casimir–Lifshitz Pressure Lab</h1>
+    <p class="subtitle">Explore Drude vs Plasma models and visualize Matsubara contributions.</p>
+  </header>
+
+  <div class="lab-grid">
+    <section class="card">
+      <div class="card-header">
+        <h2>Controls</h2>
+      </div>
+      <div class="card-body">
+        <div class="control-grid">
+          <div>
+            <label for="distance">Gap: <span id="distanceLabel"></span></label>
+            <input id="distance" type="range" min="5" max="400" step="1" value="80" />
+          </div>
+          <div>
+            <label for="model">Model</label>
+            <select id="model">
+              <option value="drude">Drude</option>
+              <option value="plasma">Plasma</option>
+            </select>
+          </div>
+          <div>
+            <label for="omegaP">ω<sub>p</sub>: <span id="omegaPLabel"></span></label>
+            <input id="omegaP" type="range" min="1" max="18" step="0.1" value="9" />
+          </div>
+          <div>
+            <label for="gammaD">Γ<sub>D</sub>: <span id="gammaDLabel"></span></label>
+            <input id="gammaD" type="range" min="0.01" max="0.3" step="0.005" value="0.05" />
+          </div>
+        </div>
+        <div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.6rem;">
+          <button id="computeQuick">Quick compute</button>
+          <button id="computeFull" class="secondary">High fidelity</button>
+          <button id="downloadCsv" class="secondary">Download CSV</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Charts</h2>
+      </div>
+      <div class="card-body charts-grid">
+        <div>
+          <div class="chart-area">
+            <canvas id="pNull"></canvas>
+          </div>
+          <p style="margin:0.35rem 0 0; color:#6b7280;">Pressure P(ξ<sub>n</sub>)</p>
+        </div>
+        <div>
+          <div class="chart-area">
+            <canvas id="residual"></canvas>
+          </div>
+          <p style="margin:0.35rem 0 0; color:#6b7280;">Residual (current - proxy)</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <p class="footer-note">Pressures are illustrative; units: distances in nm, pressure in Pa.</p>
+
+  <script>
+    const constants = {
+      hbar: 1.054571817e-34,
+      c: 2.99792458e8,
+      kB: 1.380649e-23,
+      T: 300,
+    };
+
+    const state = {
+      distanceNm: 80,
+      omegaP: 9e15,
+      gammaD: 5e13,
+      model: 'drude',
+      debounceHandle: null,
+      currentCurve: [],
+      baseline: [],
+    };
+
+    const controls = {
+      distance: document.getElementById('distance'),
+      distanceLabel: document.getElementById('distanceLabel'),
+      omegaP: document.getElementById('omegaP'),
+      omegaPLabel: document.getElementById('omegaPLabel'),
+      gammaD: document.getElementById('gammaD'),
+      gammaDLabel: document.getElementById('gammaDLabel'),
+      model: document.getElementById('model'),
+      computeQuick: document.getElementById('computeQuick'),
+      computeFull: document.getElementById('computeFull'),
+      downloadCsv: document.getElementById('downloadCsv'),
+    };
+
+    const charts = {
+      pNull: document.getElementById('pNull'),
+      residual: document.getElementById('residual'),
+    };
+
+    function syncParams() {
+      state.distanceNm = Number(controls.distance.value);
+      state.omegaP = Number(controls.omegaP.value) * 1e15;
+      state.gammaD = Number(controls.gammaD.value) * 1e14;
+      state.model = controls.model.value;
+      controls.distanceLabel.textContent = `${state.distanceNm.toFixed(0)} nm`;
+      controls.omegaPLabel.textContent = `${(state.omegaP / 1e15).toFixed(1)} ×10^15 s⁻¹`;
+      controls.gammaDLabel.textContent = `${(state.gammaD / 1e14).toFixed(3)} ×10^14 s⁻¹`;
+    }
+
+    function drudeEpsilon(ix, omegaP, gammaD) {
+      return 1 + (omegaP ** 2) / (ix * (ix + gammaD));
+    }
+
+    function plasmaEpsilon(ix, omegaP) {
+      return 1 + (omegaP ** 2) / (ix ** 2);
+    }
+
+    function lifshitzPressure(distance, { omegaP, gammaD, mode, resolution }) {
+      // Pressure form (not free energy): P = -(kBT/π) Σ' ∫ k κ [ x/(1-x) ] dk
+      const { hbar, c, kB, T } = constants;
+      const matsubaraN = resolution?.matsubara ?? 60;
+      const kSteps = resolution?.kPerp ?? 80;
+      const kMax = resolution?.kMax ?? 8e8;
+      const wp_c = omegaP / c;
+      let sumN = 0;
+
+      for (let n = 0; n < matsubaraN; n++) {
+        const weight = n === 0 ? 0.5 : 1;
+        const xi = (2 * Math.PI * n * kB * T) / hbar;
+        const xi_c = xi / c;
+        const xi_c2 = xi_c * xi_c;
+
+        let integral = 0;
+        for (let i = 0; i < kSteps; i++) {
+          const k = ((i + 0.5) / kSteps) * kMax;
+          const k2 = k * k;
+          const kappa = Math.sqrt(k2 + xi_c2);
+
+          let epsilon = 1;
+          let kappaM = kappa;
+
+          if (mode === 'plasma') {
+            // κ_m^2 = k^2 + ξ^2/c^2 + ω_p^2/c^2  (fixes TE n=0 behavior)
+            kappaM = Math.sqrt(k2 + xi_c2 + wp_c * wp_c);
+            if (n > 0) epsilon = plasmaEpsilon(xi, omegaP);
+          } else {
+            const xiEff = xi || 1e-30;
+            epsilon = drudeEpsilon(xiEff, omegaP, gammaD);
+            kappaM = Math.sqrt(k2 + epsilon * xi_c2);
+          }
+
+          let rTE = (kappa - kappaM) / (kappa + kappaM);
+          if (n === 0 && mode === 'drude') rTE = 0; // Drude TE zero mode
+
+          let rTM = 1;
+          if (n > 0) rTM = (epsilon * kappa - kappaM) / (epsilon * kappa + kappaM);
+
+          const expo = Math.exp(-2 * kappa * distance); // vacuum gap decay
+          const xTE = Math.min(0.999999999999, rTE * rTE * expo);
+          const xTM = Math.min(0.999999999999, rTM * rTM * expo);
+          const term = xTE / (1 - xTE) + xTM / (1 - xTM);
+          integral += k * kappa * term;
+        }
+
+        integral *= (kMax / kSteps);
+        sumN += weight * integral;
+      }
+
+      return -(kB * T / Math.PI) * sumN;
+    }
+
+    function buildDistanceGrid({ coarse = false } = {}) {
+      const minNm = 5;
+      const maxNm = 400;
+      const points = coarse ? 36 : 120;
+      const logMin = Math.log(minNm);
+      const logMax = Math.log(maxNm);
+      const distancesNm = Array.from({ length: points }, (_, i) => Math.exp(logMin + (logMax - logMin) * (i / (points - 1))));
+      return distancesNm.map((nm) => ({ nm, meters: nm * 1e-9 }));
+    }
+
+    function computeCurve(distances, { model, omegaP, gammaD, resolution }) {
+      return distances.map((d) => ({ d: d.nm, p: lifshitzPressure(d.meters, { omegaP, gammaD, mode: model, resolution }) }));
+    }
+
+    function debounceCompute() {
+      clearTimeout(state.debounceHandle);
+      state.debounceHandle = setTimeout(() => {
+        const distances = buildDistanceGrid({ coarse: true });
+        state.currentCurve = computeCurve(distances, {
+          model: state.model,
+          omegaP: state.omegaP,
+          gammaD: state.gammaD,
+          resolution: { matsubara: 18, kPerp: 24, kMax: 5e8 },
+        });
+        // Baseline always on same grid -> residual never “disappears”
+        state.baseline = computeCurve(distances, {
+          model: 'proxy',
+          omegaP: state.omegaP,
+          gammaD: state.gammaD,
+          resolution: { matsubara: 1, kPerp: 1, kMax: 1 },
+        });
+        render();
+      }, 220);
+    }
+
+    function computeFullCurve() {
+      const distances = buildDistanceGrid({ coarse: false });
+      state.currentCurve = computeCurve(distances, {
+        model: state.model,
+        omegaP: state.omegaP,
+        gammaD: state.gammaD,
+        resolution: { matsubara: 64, kPerp: 90, kMax: 9e8 },
+      });
+      state.baseline = computeCurve(distances, {
+        model: 'proxy',
+        omegaP: state.omegaP,
+        gammaD: state.gammaD,
+        resolution: { matsubara: 1, kPerp: 1, kMax: 1 },
+      });
+      render();
+    }
+
+    function renderLine(canvas, data, color, markerX) {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const clean = data.filter((pt) => Number.isFinite(pt.d) && Number.isFinite(pt.p));
+      if (!clean.length) {
+        ctx.fillStyle = '#6c7480';
+        ctx.font = '14px system-ui';
+        ctx.fillText('No finite data (NaN/∞).', 10, 20);
+        return;
+      }
+      const padding = 30;
+      const w = canvas.width - padding * 2;
+      const h = canvas.height - padding * 2;
+      const minX = Math.min(...clean.map((d) => d.d));
+      const maxX = Math.max(...clean.map((d) => d.d));
+      const minY = Math.min(...clean.map((d) => d.p));
+      const maxY = Math.max(...clean.map((d) => d.p));
+      const yRange = maxY - minY || 1;
+
+      // frame
+      ctx.strokeStyle = '#d7dce1';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(padding, padding, w, h);
+
+      // marker line (active distance)
+      if (Number.isFinite(markerX)) {
+        const mx = padding + ((markerX - minX) / (maxX - minX || 1)) * w;
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath();
+        ctx.moveTo(mx, padding);
+        ctx.lineTo(mx, padding + h);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      clean.forEach((pt, i) => {
+        const x = padding + ((pt.d - minX) / (maxX - minX || 1)) * w;
+        const y = padding + (1 - (pt.p - minY) / yRange) * h;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+
+    function buildResiduals() {
+      if (!state.baseline || !state.currentCurve.length) return [];
+      if (state.baseline.length === state.currentCurve.length) {
+        let ok = true;
+        for (let i = 0; i < state.baseline.length; i++) {
+          if (Math.abs(state.baseline[i].d - state.currentCurve[i].d) > 1e-6) { ok = false; break; }
+        }
+        if (ok) {
+          return state.currentCurve.map((pt, i) => ({ d: pt.d, p: pt.p - state.baseline[i].p }));
+        }
+      }
+      const baselineMap = new Map(state.baseline.map((d) => [Math.round(d.d * 1000), d.p]));
+      return state.currentCurve
+        .filter((d) => baselineMap.has(Math.round(d.d * 1000)))
+        .map((d) => ({ d: d.d, p: d.p - baselineMap.get(Math.round(d.d * 1000)) }));
+    }
+
+    function render() {
+      renderLine(charts.pNull, state.currentCurve, '#0058b0', state.distanceNm);
+      renderLine(charts.residual, buildResiduals(), '#b00058', state.distanceNm);
+    }
+
+    function resizeCanvases() {
+      [charts.pNull, charts.residual].forEach((cv) => {
+        if (!cv || !cv.parentElement) return;
+        const rect = cv.parentElement.getBoundingClientRect();
+        const w = Math.max(1, Math.floor(rect.width));
+        const h = Math.max(1, Math.floor(rect.height));
+        if (cv.width !== w) cv.width = w;
+        if (cv.height !== h) cv.height = h;
+      });
+    }
+
+    function computeQuick() {
+      const distances = buildDistanceGrid({ coarse: true });
+      state.currentCurve = computeCurve(distances, {
+        model: state.model,
+        omegaP: state.omegaP,
+        gammaD: state.gammaD,
+        resolution: { matsubara: 12, kPerp: 16, kMax: 4e8 },
+      });
+      state.baseline = computeCurve(distances, {
+        model: 'proxy',
+        omegaP: state.omegaP,
+        gammaD: state.gammaD,
+        resolution: { matsubara: 1, kPerp: 1, kMax: 1 },
+      });
+      render();
+    }
+
+    function downloadCsv() {
+      if (!state.currentCurve.length) return;
+      const rows = ['d_nm,P_null(Pa)'];
+      state.currentCurve.forEach((pt) => rows.push(`${pt.d.toFixed(3)},${pt.p.toExponential(6)}`));
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'pressure.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    controls.distance.addEventListener('input', () => {
+      syncParams();
+      render();
+    });
+
+    controls.model.addEventListener('change', () => {
+      syncParams();
+      debounceCompute();
+    });
+
+    controls.omegaP.addEventListener('input', () => {
+      syncParams();
+      debounceCompute();
+    });
+
+    controls.gammaD.addEventListener('input', () => {
+      syncParams();
+      debounceCompute();
+    });
+
+    controls.computeQuick.addEventListener('click', () => computeQuick());
+    controls.computeFull.addEventListener('click', () => computeFullCurve());
+    controls.downloadCsv.addEventListener('click', () => downloadCsv());
+
+    window.addEventListener('resize', () => {
+      resizeCanvases();
+      render();
+    });
+
+    function init() {
+      resizeCanvases();
+      syncParams();
+      computeQuick();
+    }
+
+    // Run init after layout is stable.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(init));
+    } else {
+      requestAnimationFrame(init);
+    }
+  </script>
+</body>
+</html>
